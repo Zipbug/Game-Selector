@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  TextInput,
   Image,
   Platform,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { WebBrowser } from 'expo';
+import { Button, ThemeProvider,Input } from 'react-native-elements';
 
 import { MonoText } from '../components/StyledText';
 var parseString = require('react-native-xml2js').parseString;
@@ -16,11 +18,14 @@ var parseString = require('react-native-xml2js').parseString;
 export default class HomeScreen extends React.Component {
   constructor(props){
     super(props);
-    const userName = "zipbug";
 
     this.state= {
-      gameData:null
+      gameData:null,
+      player:null
     }
+  }
+  setPlayer(){
+    this.setState({player: this.state.text}, ()=>{this.getFromApi()});
   }
 
   static navigationOptions = {
@@ -28,37 +33,26 @@ export default class HomeScreen extends React.Component {
   };
 
   getFromApi() {
-    let gameData = null;
-    var request = new XMLHttpRequest();
-      request.onreadystatechange = (e) => {
-        if (request.readyState !== 4) {
-          return;
-        }
-
-        if (request.status === 200) {
-          const response = request.response;
-          parseString(response, {trim: true, explicitArray:false, mergeAttrs:true, preserveChildrenOrder:true}, function (err, result) {
-              if(err){
-                console.log(err)
-              }else{
-                gameData = result.items.item;
-
-              }
-          });
-
+    fetch('https://bgg-json.azurewebsites.net/collection/'+ this.state.player, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      }
+    }).then((response) => response.json())
+        .then((gameData) => {
+          console.log("gameData", gameData);
           this.setState({gameData});
-        } else {
-          console.warn('error', request);
-        }
-      };
+        })
+        .catch((error) => {
+          console.error(error);
+        });
 
-      request.open('GET', 'https://www.boardgamegeek.com/xmlapi2/collection?username=zipbug');
-      request.send();
 
   }
 
   componentDidMount(){
-    if(!this.state.gameData){
+    if(!this.state.gameData && this.state.player){
         this.getFromApi();
   }
  }
@@ -67,32 +61,46 @@ export default class HomeScreen extends React.Component {
 
 
   render() {
-    console.log(this.state.gameData);
     return (
       <View style={styles.container}>
         <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-
+          {!this.state.player && this.renderSignUp()}
           {(this.state.gameData && this.state.gameData.length) && this.state.gameData.map(this.renderGameData.bind(this))}
 
         </ScrollView>
-
-        <View style={styles.tabBarInfoContainer}>
-          <Text style={styles.tabBarInfoText}>This is a tab bar. You can edit it in:</Text>
-
-          <View style={[styles.codeHighlightContainer, styles.navigationFilename]}>
-            <MonoText style={styles.codeHighlightText}>navigation/MainTabNavigator.js</MonoText>
-          </View>
-        </View>
       </View>
     );
+  }
+  renderSignUp(){
+    return(
+      <View style={styles.welcomeContainer}>
+        <Input
+          containerStyle={styles.input}
+          inputContainerStyle={styles.containerStyle}
+          style={{height: 10}}
+          placeholder="Enter your BBG User Name"
+          autoCapitalize = 'none'
+          onChangeText={(text) => this.setState({text})}
+        />
+        <Button
+          onPress={this.setPlayer.bind(this)}
+          title="Get Games"
+          color="#841584"
+          type="outline"
+          accessibilityLabel="Get all your games"
+        />
+      </View>
+    )
   }
 
   renderGameData(item, index, array){
     return(
       <View key={index} style={styles.gameStyle}>
         <Image source={{uri: item.thumbnail}} style={styles.gameImage}/>
-        <Text style={styles.gameName}>{item.name._}</Text>
-        
+        <View>
+          <Text style={styles.gameName}>{item.name}</Text>
+          <Text style={styles.developmentModeText}>Plays: {item.minPlayers} - {item.maxPlayers}</Text>
+        </View>
       </View>
     );
   }
@@ -147,7 +155,12 @@ const styles = StyleSheet.create({
     paddingTop: 30,
   },
   welcomeContainer: {
+    paddingTop: 30,
     alignItems: 'center',
+    flex: 1,
+    flexDirection: 'column',
+    justifyContent: 'center', //Centered vertically
+    alignItems: 'center', // Centered horizontally
     marginTop: 10,
     marginBottom: 20,
   },
@@ -159,8 +172,6 @@ const styles = StyleSheet.create({
     paddingBottom:10,
     flex: 1,
     flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center'
   },
   gameImage: {
     width: 100,
@@ -173,6 +184,15 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     fontWeight:"bold",
     flex:1,
+  },
+  containerStyle:{
+    borderBottomWidth:0,
+  },
+  input:{
+    backgroundColor:"#dbdbdb",
+    borderRadius:30,
+    marginBottom:10,
+    width:300
   },
   getStartedContainer: {
     alignItems: 'center',
