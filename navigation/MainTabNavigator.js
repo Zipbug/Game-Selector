@@ -16,7 +16,7 @@ HomeStack.navigationOptions = {
   tabBarIcon: ({ focused }) => (
     <TabBarIcon
       focused={focused}
-      name={Platform.OS === 'ios' ? 'ios-list' : 'bars'}
+      name={Platform.OS === 'ios' ? 'ios-list' : 'md-reorder'}
     />
   ),
 };
