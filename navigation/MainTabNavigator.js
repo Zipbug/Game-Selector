@@ -54,8 +54,10 @@ SettingsStack.navigationOptions = {
   ),
 };
 
-export default createBottomTabNavigator({
+const Navigator = createBottomTabNavigator({
   HomeStack,
   LinksStack,
   SettingsStack,
 });
+
+export default Navigator;

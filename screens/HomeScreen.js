@@ -1,54 +1,64 @@
 import React from 'react';
-import {
-  Modal,
-  TextInput,
-  Image,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  TouchableHighlight,
-  View,
-  AsyncStorage
-} from 'react-native';
+import { Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableHighlight, View, AsyncStorage, ActivityIndicator,} from 'react-native';
 import TabBarIcon from '../components/TabBarIcon';
+import GameFilter from '../components/GameFilter';
+import FullGameInfo from '../components/FullGameInfo';
+import SignIn from '../components/SignIn'
 import { WebBrowser } from 'expo';
-import { Button, ThemeProvider,Input, Header, CheckBox } from 'react-native-elements';
+import { ThemeProvider, Input, Header } from 'react-native-elements';
+import { styles } from '../assets/styles'
 
-import { MonoText } from '../components/StyledText';
-var parseString = require('react-native-xml2js').parseString;
+
+let parseString = require('react-native-xml2js').parseString;
 
 export default class HomeScreen extends React.Component {
-  constructor(props){
-    super(props);
-
-    let player = null;
-    this._retrieveData('pid').then((data) => {player = data});
-
-    this.state= {
-      player: player,
-      gameData:null,
-      modalVisible: false,
-      expansions:true,
-      players:0,
-      picked: null,
-      selectedGame:false,
-      selectedVisible:false,
-      playtime: null,
-      search: '',
-    }
-  }
-
-  setPlayer(){
-    this.setState({player: this.state.text}, ()=>{this.getFromApi(); this._storeData('pid', this.state.player)});
-  }
-
   static navigationOptions = {
     header: null,
   };
 
+  /*----------------------
+      Component Methods
+  ----------------------*/
+  constructor(props){
+    super(props);
+
+    let player = null;
+    let gameData = null;
+
+    this._retrieveData('pid').then((data) => {player = data});
+    this._retrieveData('gdata').then((data) => {gameData = JSON.parse(data)});
+
+    this.state= {
+      player: player,
+      gameData:gameData,
+      sortedData:null,
+      gameFilter: false,
+      selectedGame:false,
+      search: '',
+      loading:false,
+    }
+  }
+
+  componentDidMount(){
+    if(!this.state.gameData && this.state.player){this.getFromApi();}else if(this.state.gameData && this.state.player){this.sortAndGroup();}
+  }
+
+  _storeData = async (id, data) => {
+    try {await AsyncStorage.setItem(id, data)} catch (error) {console.log(error)}
+  };
+
+  _retrieveData = async (id) => {
+    let value = null;
+    try {value = await AsyncStorage.getItem(id);} catch (error) {console.log(error)}
+    return value;
+  };
+
+  /*----------------------
+         Getters
+  ----------------------*/
+
   getFromApi() {
+    this.setState({loading:true});
     fetch('https://bgg-json.azurewebsites.net/collection/'+ this.state.player +"?grouped=true" , {
       method: 'GET',
       headers: {
@@ -57,235 +67,178 @@ export default class HomeScreen extends React.Component {
       }
     }).then((response) => response.json())
         .then((gameData) => {
-          // console.log(gameData)
-
-          this.setState({gameData});
-        })
-        .catch((error) => {
-          console.error(error);
-        });
-  }
-  getGameData(id){
-    let gameData = null;
-    var request = new XMLHttpRequest();
-      request.onreadystatechange = (e) => {
-        if (request.readyState !== 4) {
-          return;
-        }
-
-        if (request.status === 200) {
-          const response = request.response;
-          parseString(response, {trim: true, explicitArray:false, mergeAttrs:true, preserveChildrenOrder:true}, function (err, result) {
-              if(err){
-                console.log(err)
-              }else{
-                gameData = result.items.item;
-
-              }
-          });
-        }
-      }
-      request.open('GET', 'https://www.boardgamegeek.com/xmlapi2/thing?=' + id);
-      request.send();
-      return gameData;
+          if(gameData){
+            this.setState({gameData}, ()=>{gameData.map((game, index, array)=>{this.getGameData(game.gameId, index, array.length - 1);});});
+          }
+        }).catch((error) => {console.error(error);});
   }
 
-  componentDidMount(){
-    if(!this.state.gameData && this.state.player){
-        this.getFromApi();
-    }
-  }
-
-  setModalVisible(visible) {
-    this.setState({modalVisible: visible});
-  }
-
-  pickGame(){
-    if(this.state.gameData){
-      const available = this.state.gameData.filter(item => {
-        let playtime = true;
-        let players = this.state.players >= item.minPlayers && this.state.players <= item.maxPlayers;
-        if(this.state.playtime && this.state.playtime > 0){
-          playtime = this.state.playtime >= item.playingTime;
-        }
-        return (playtime && players);
+  sortAndGroup(){
+    let groupedArray = []
+    this.state.gameData.map((item, index)=>{
+        item.orginIndex = index;
+        const firstLetter = item['name'].charAt(0);
+        const header = groupedArray.findIndex((element)=>{return element.header && element.header === firstLetter});
+        if(header == -1){groupedArray.push({"header": firstLetter, collection:[item]});}else{groupedArray[header].collection.push(item);}
       });
-      const randomNum = Math.floor(Math.random() * Math.floor((available.length - 1)));
-
-      this.setState({picked: available[randomNum]});
-    }
-  }
-
-  selectGame(selectedGame){
-    this.setState({selectedGame, selectedVisible: !!selectedGame});
-  }
-
-  _storeData = async (id, data) => {
-    try {
-      await AsyncStorage.setItem(id, storage);
-    } catch (error) {
-      // Error saving data
-    }
+      this.setState({sortedData:groupedArray, loading:false});
   };
 
-  _retrieveData = async (id) => {
-    let value = null;
-    try {
-      value = await AsyncStorage.getItem(id);
-    } catch (error) {
-      // Error retrieving data
-    }
-    return value;
-  };
+  getGameData(id, index, last){
+    let data = this.state.gameData[index];
+    let gameData = this.state.gameData;
+    fetch('https://www.boardgamegeek.com/xmlapi2/thing?id='+ id)
+    .then(str => {
+      if(str){
+        const rdata = str._bodyInit;
+        parseString(rdata, {trim: true, explicitArray:false, mergeAttrs:true, preserveChildrenOrder:true, explicitRoot:false}, function (err, result) {
+            if(err){console.log(err)}else{
+              let categories = [];
+              let polls = []
+              data.type = result.item.type;
+              data.description = result.item.description;
+              data.yearpublished = result.item.yearpublished.value;
+              data.minplaytime = result.item.minplaytime.value;
+              data.minage = result.item.minage.value;
+
+              result.item.link.map((item, index)=>{
+                 if(categories.indexOf(item.type) == -1){
+                  categories.push(item.type);
+                  data[item.type] = [];
+                 }
+                 data[item.type].push(item.value);
+              });
+              if(result.item.poll){
+                result.item.poll.map((item, index)=>{
+                   if(polls.indexOf(item.name) == -1){
+                    polls.push(item.name);
+                    let best = 0;
+                    if(item.name == 'suggested_numplayers'){
+                      let recommended = 0;
+                      let recommendedNumber = 0;
+                      let bestNumber =0;
+                      item.results.map((e,i)=>{
+                        e.result.map((v,k)=>{
+                          if(v.value == 'Best' && v.numvotes > best){
+                            best = v.numvotes;
+                            bestNumber = e.numplayers;
+                          }
+                          if(v.value == 'Recommended' && v.numvotes > recommended){
+                            recommended = v.numvotes;
+                            recommendedNumber = e.numplayers;
+                          }
+                        });
+                      });
+                      data[item.name]= {
+                        "best":bestNumber,
+                        "recommended": recommendedNumber
+                      }
+                    }else if(item.name == 'suggested_playerage'){
+                      let age = 0;
+                      item.results.result.map((e,i)=>{
+                        if(e.numvotes > best){
+                          best = e.numvotes;
+                          age = e.value;
+                        }
+                      });
+                      data[item.name] = age;
+                    }
+                   }
+                });
+              }
+              return data;
+            }
+        });
+      }
+      gameData[index] = data;
+      this.setState({gameData}, ()=>{
+        if(index === last){
+          this._storeData('gdata', JSON.stringify(gameData));
+          this.sortAndGroup();
+        }
+      });
+    });
+  }
+
+  /*----------------------
+         Setters
+  ----------------------*/
+
+  setPlayer(player){
+    this._storeData('pid', player);
+    this.setState({player}, ()=>{this.getFromApi();});
+  }
+
+
+  setGameFilter(gameFilter) {
+    this.setState({gameFilter});
+  }
+
+
+  setSelection(selectedGame){
+    this.setState({selectedGame});
+  }
 
   render() {
+
     return (
       <View style={styles.container}>
-        {this.renderModal()}
-        {this.renderSelectedModal()}
-        {this.state.player &&
-          <Header
-            containerStyle={styles.headerBar}
-            barStyle="light-content"
-            centerComponent={<Input
-            containerStyle={styles.input}
-            inputContainerStyle={styles.containerStyle}
-            placeholderTextColor="#444444"
-            style={{height: 10}}
-            autoCapitalize = 'none'
-            onChangeText={(search) => this.setState({search})}/>}
-            leftComponent={
-              <TouchableHighlight onPress={() => { this.setModalVisible(true);}}><TabBarIcon name={Platform.OS === 'ios' ? 'ios-nuclear' : 'md-nuclear'} /></TouchableHighlight>
-            }
-            rightComponent={{ icon: 'search', color: '#fff' }}
-          />
+        <FullGameInfo
+        item={this.state.selectedGame}
+        setSelection={this.setSelection.bind(this)}
+        />
+        <GameFilter
+          gameData={this.state.gameData}
+          visible={this.state.gameFilter}
+          setGameFilter={this.setGameFilter.bind(this)}
+          setSelection={this.setSelection.bind(this)}
+        />
+        {this.state.player && this.renderHeader()}
+        {(!this.state.player || this.state.loading)
+          ? this.renderCenterPage()
+          : <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+              {this.state.sortedData && this.state.sortedData.map(this.renderGameData.bind(this))}
+            </ScrollView>
         }
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-          {!this.state.player && this.renderSignUp()}
-          {(this.state.gameData && this.state.gameData.length) && this.state.gameData.map(this.renderGameData.bind(this))}
-        </ScrollView>
       </View>
     );
   }
-  renderModal(){
+  renderHeader(){
     return(
-      <Modal
-         animationType="slide"
-         transparent={false}
-         visible={this.state.modalVisible}
-         >
-          <View>
-            <Header
-             containerStyle={styles.headerBar}
-             barStyle="light-content"
-             rightComponent={<TouchableHighlight onPress={() => {this.setModalVisible(false);}}><Text>Close</Text></TouchableHighlight>}
-            />
-
-            <View style={{paddingVertical:20, paddingHorizontal:20}} >
-              <Input
-                containerStyle={styles.input}
-                inputContainerStyle={styles.containerStyle}
-                placeholderTextColor="#444444"
-                style={{height: 10}}
-                placeholder="Players"
-                autoCapitalize = 'none'
-                onChangeText={(players) => this.setState({players})}
-              />
-              <Button
-                onPress={this.pickGame.bind(this)}
-                title="Pick Game"
-                color="#841584"
-                type="outline"
-                accessibilityLabel="Pick Random Game"
-              />
-              <Input
-                containerStyle={styles.input}
-                inputContainerStyle={styles.containerStyle}
-                placeholderTextColor="#444444"
-                style={{height: 10}}
-                placeholder="Play Time"
-                autoCapitalize = 'none'
-                onChangeText={(playtime) => this.setState({playtime})}
-              />
-              <CheckBox title='Include Expansions'checked={this.state.expansions}/>
-              <View style={styles.container}>
-                {this.state.picked && this.renderPicked()}
-              </View>
-            </View>
-          </View>
-      </Modal>
-    )
-  }
-  renderSelectedModal(){
-    const item = this.state.selectedGame;
-    return(
-      <Modal
-         animationType="slide"
-         transparent={false}
-         visible={this.state.selectedVisible}
-         >
-          {item &&
-          <View>
-            <Header
-             containerStyle={styles.headerBar}
-             barStyle="light-content"
-             rightComponent={<TouchableHighlight onPress={() => {this.selectGame(false);}}><Text>Close</Text></TouchableHighlight>}
-            />
-
-            <View style={{paddingVertical:20, paddingHorizontal:20}} >
-              <Image source={{uri: item.thumbnail}} style={styles.gameImage}/>
-              <View>
-                <Text style={styles.gameName}>{item.name}</Text>
-                <Text>Published: {item.yearPublished}</Text>
-                <Text>ID: {item.gameId}</Text>
-                <Text style={styles.developmentModeText}>Plays: {item.minPlayers} - {item.maxPlayers}</Text>
-                {item.playingTime > 0 && <Text style={styles.developmentModeText}>Playing Time: {item.playingTime}min</Text>}
-
-              </View>
-            </View>
+      <Header
+        containerStyle={styles.headerBar}
+        barStyle="light-content"
+        centerComponent={
+          <View style={{flex:1, alignItems: 'center',justifyContent: 'center',flexDirection:'row'}}>
+            <Input containerStyle={[styles.input, styles.search]} inputContainerStyle={styles.containerStyle} placeholderTextColor="#444444"style={{height: 10}} autoCapitalize = 'none' onChangeText={(search) => this.setState({search})}/>
+            <TabBarIcon name={Platform.OS === 'ios' ? 'ios-search' : 'md-search'} />
           </View>
         }
-      </Modal>
+        leftComponent={<TouchableHighlight onPress={() => { this.setGameFilter(true);}}><TabBarIcon name={Platform.OS === 'ios' ? 'ios-shuffle' : 'md-shuffle'} /></TouchableHighlight>}
+        rightComponent={<View><TouchableHighlight onPress={() => { this.getFromApi();}}><TabBarIcon name={Platform.OS === 'ios' ? 'ios-refresh' : 'md-refresh'} /></TouchableHighlight></View>}
+      />
     )
   }
-  renderPicked(){
-    item = this.state.picked;
+  renderCenterPage(){
     return(
-      <View >
-        <Image source={{uri: item.thumbnail}} style={styles.gameImage}/>
-        <View style={{textAlign:"left"}}>
-          <Text >{item.name}</Text>
-          <Text >Plays: {item.minPlayers} - {item.maxPlayers}</Text>
+      <View style={[styles.container, styles.horizontal]}>
+          {!this.state.player && <SignIn setPlayer={this.setPlayer.bind(this)} />}
+          {this.state.loading && <ActivityIndicator size="large" color="#0000ff" />}
+      </View>
+    );
+  }
+
+  renderGameData(item, index){
+    return(
+      <View key={'h-' + index} style={{paddingHorizontal:20}} >
+        {this.state.search.length == 0 && <Text style={{fontSize:20, fontWeight:'bold'}}>{item.header}</Text>}
+        <View  style={{paddingHorizontal:20}} >
+          {item.collection.map(this.renderGameItem.bind(this))}
         </View>
       </View>
     );
   }
-  renderSignUp(){
-    return(
-      <View style={styles.welcomeContainer}>
-        <Input
-          containerStyle={styles.input}
-          inputContainerStyle={styles.containerStyle}
-          placeholderTextColor="#444444"
-          style={{height: 10}}
-          placeholder="Enter your BBG User Name"
-          autoCapitalize = 'none'
-          leftIconContainerStyle={{marginHorizontal:10}}
-          leftIcon={<TabBarIcon color={"#444444"} name={Platform.OS === 'ios' ? 'ios-person' : 'md-person'} />}
-          onChangeText={(text) => this.setState({text})}
-        />
-        <Button
-          onPress={this.setPlayer.bind(this)}
-          title="Get Games"
-          color="#841584"
-          type="outline"
-          accessibilityLabel="Get all your games"
-        />
-      </View>
-    )
-  }
-
-  renderGameData(item, index, array){
+  renderGameItem(item, index, array){
     //Check to see if search string has any letters.
     if(this.state.search.length){
       //Change both the name and the search to lowercase to make sure everything matches.
@@ -295,10 +248,10 @@ export default class HomeScreen extends React.Component {
       if(!ln.includes(s)){return;}
     }
     return(
-      <TouchableOpacity key={index} onPress={this.selectGame.bind(this, item)}>
-        <View  style={styles.gameStyle} onClick>
+      <TouchableOpacity key={'g-'+ index} onPress={this.setSelection.bind(this, item)}>
+        <View  style={styles.gameStyle} >
           <Image source={{uri: item.thumbnail}} style={styles.gameImage}/>
-          <View style={{textAlign:"left", flex: 1, flexWrap: 'wrap'}}>
+          <View style={{textAlign:"left"}}>
             <Text style={styles.gameName}>{item.name}</Text>
             <Text style={styles.developmentModeText}>Plays: {item.minPlayers} - {item.maxPlayers}</Text>
           </View>
@@ -308,65 +261,3 @@ export default class HomeScreen extends React.Component {
   }
 
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  developmentModeText: {
-    marginBottom: 20,
-    color: 'rgba(0,0,0,0.4)',
-    fontSize: 14,
-    lineHeight: 19,
-    textAlign: 'center',
-  },
-  contentContainer: {
-    paddingTop: 30,
-  },
-  welcomeContainer: {
-    paddingTop: 30,
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'column',
-    justifyContent: 'center', //Centered verticallyx`
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  gameStyle:{
-    borderBottomWidth:2,
-    borderColor:"#444444",
-    marginTop:10,
-    marginBottom:10,
-    paddingBottom:10,
-    flex: 1,
-    flexDirection: 'row',
-  },
-  gameImage: {
-    width: 100,
-    height: 80,
-    resizeMode: 'contain',
-    marginTop: 3,
-  },
-  gameName: {
-    fontSize: 18,
-    lineHeight: 19,
-    fontWeight:"bold",
-    flex:1,
-  },
-  containerStyle:{
-    borderBottomWidth:0
-  },
-  input:{
-    backgroundColor:"#dbdbdb",
-    borderRadius:30,
-    marginBottom:10,
-    paddingVertical:10,
-    width:300
-  },
-  headerBar: {
-    paddingHorizontal:20,
-    paddingVertical:20,
-    backgroundColor:"#444444"
-  },
-});

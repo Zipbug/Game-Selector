@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Game-Picker",
-    "description": "A very interesting project.",
-    "slug": "Game-Picker",
+    "name": "Game Selector",
+    "description": "Let our app pick a game for you from your BGG library.",
+    "slug": "Game-Selector",
     "privacy": "public",
     "sdkVersion": "31.0.0",
     "platforms": ["ios", "android"],
