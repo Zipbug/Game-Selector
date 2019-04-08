@@ -30,6 +30,11 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 20,
   },
+  gameFullInfoContainer:{
+    padding:0,
+    flex: 1,
+    flexDirection: 'column',
+  },
   gameInfoContainer: {
     paddingTop: 30,
     flex: 1,
@@ -81,15 +86,16 @@ const styles = StyleSheet.create({
     paddingVertical:10,
     width:300
   },
-  search:{
-    paddingVertical:2,
-    marginRight:5,
-    flex:2
-  },
   headerBar: {
     paddingHorizontal:20,
     paddingVertical:10,
     backgroundColor:"#444444"
   },
+  lightHeaderBar:{
+    paddingHorizontal:20,
+    paddingVertical:10,
+    backgroundColor:"#ffffff",
+    zIndex:5
+  }
 });
  export { styles }

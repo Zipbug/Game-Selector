@@ -1,78 +1,135 @@
 import React from 'react';
-import { Modal, View, StyleSheet, TouchableHighlight, Platform } from 'react-native';
+import {Animated, Easing, Text, Modal, View, StyleSheet, TouchableOpacity, Platform, Picker } from 'react-native';
 import {Overlay, Header, Input, Button, Checkbox} from 'react-native-elements';
-import TabBarIcon from '../components/TabBarIcon';
+import { Icon } from 'expo';
 import { styles } from '../assets/styles'
+import { Dropdown } from 'react-native-material-dropdown';
+import Collapsible from 'react-native-collapsible';
 
 export default class GameFilter extends React.Component {
   constructor(props){
     super(props);
+
     this.state ={
-      players:0,
+      player:this.props.user,
       picked: null,
       expansions:false,
-      playtime: null,
+      time: null,
+      players:null,
+      minAge:null,
+      suggestedAge:null,
+      suggestedNumberPlayers:null,
+      bestNumberPlayers:null,
+      mechanics:null,
+      categories:null
     }
   }
+
   pickGame(){
+    const filter = this.state;
     if(this.props.gameData){
       const available = this.props.gameData.filter(item => {
-        let playtime = true;
-        let players = this.state.players >= item.minPlayers && this.state.players <= item.maxPlayers;
-        if(this.state.playtime && this.state.playtime > 0){
-          playtime = this.props.playtime >= item.playingTime;
-        }
-        return (playtime && players);
+        let time = true;
+        let players = true;
+        let category = true;
+        let mechanics = true;
+        let age = true;
+        if(filter.minAge) age = Number(item.minage) >= Number(filter.minAge);
+        if(filter.time) time = Number(item.playingTime) >= Number(ilter.minTime);
+        if(filter.players) players =  filter.players >= Number(item.minPlayers) && filter.players <= Number(item.maxPlayers);
+        if(filter.categories) category = item.boardgamecategory.indexOf(filter.categories) !== -1;
+        if(filter.mechanics) mechanics =  item.boardgamemechanic.indexOf(filter.mechanics) !== -1;
+
+        return(time && players && category && mechanics && age);
       });
       const randomNum = Math.floor(Math.random() * Math.floor((available.length - 1)));
       this.props.setSelection(available[randomNum]);
     }
   }
-  render(){
-    return(
-      <Modal
-         animationType="slide"
-         transparent={false}
-         onRequestClose={() => {this.props.setGameFilter(false)}}
-         visible={this.props.visible}
-         >
-          <View>
-            <Header
-             containerStyle={styles.headerBar}
-             barStyle="light-content"
-             rightComponent={<TouchableHighlight onPress={() => {this.props.setGameFilter(false);}}><TabBarIcon name={Platform.OS === 'ios' ? 'ios-close' : 'md-close'} /></TouchableHighlight>}
-            />
+  onValueChanged(prop, value){
+    let state = this.state;
+    state[prop]  = value;
 
-            <View style={{paddingVertical:20, paddingHorizontal:20}} >
-              <Input
-                containerStyle={styles.input}
-                inputContainerStyle={styles.containerStyle}
-                placeholderTextColor="#444444"
-                style={{height: 10}}
-                placeholder="Players"
-                autoCapitalize = 'none'
-                onChangeText={(players) => this.setState({players})}
+    this.setState(state);
+    this.props.setFilter(state);
+  }
+
+
+  render(){
+    const filiterVisible = !this.props.gameFilterData || !this.props.visible;
+    let players = [];
+    if(this.props.gameFilterData){
+    for (var i = this.props.gameFilterData.minPlayers; i <= this.props.gameFilterData.maxPlayers; i++) {
+        players.push({value: i});
+    }}
+    return(
+      <View style={{backgroundColor: 'rgba(52, 52, 52, 0)',zIndex:5}}>
+        <Collapsible collapsed={!this.props.visible}>
+        {this.props.gameFilterData &&
+          <View style={{paddingVertical:20, paddingHorizontal:20}}>
+            <View style={{flexDirection:"row"}}>
+              <Dropdown
+
+              containerStyle={{flex:1}}
+              label='Minimum Age'
+              data={this.props.gameFilterData.minAge}
+              onChangeText={this.onValueChanged.bind(this, 'minAge')}
               />
-              <Button
-                onPress={this.pickGame.bind(this)}
-                title="Pick Game"
-                color="#841584"
-                type="outline"
-                accessibilityLabel="Pick Random Game"
+              <Dropdown
+                containerStyle={{flex:1,marginLeft:20}}
+                label='Players'
+                data={players}
+                onChangeText={this.onValueChanged.bind(this, 'players')}
               />
-              <Input
-                containerStyle={styles.input}
-                inputContainerStyle={styles.containerStyle}
-                placeholderTextColor="#444444"
-                style={{height: 10}}
-                placeholder="Play Time"
-                autoCapitalize = 'none'
-                onChangeText={(playtime) => this.setState({playtime})}
+            </View>
+            <View style={{flexDirection:"row"}}>
+              <Dropdown
+
+              containerStyle={{flex:1}}
+              label='Play Time'
+              data={this.props.gameFilterData.minPlayTime}
+              onChangeText={this.onValueChanged.bind(this, 'time')}
+              />
+              <Dropdown
+              containerStyle={{flex:1,marginHorizontal: 20}}
+              label='Mechanics'
+              data={this.props.gameFilterData.mechanics}
+              onChangeText={this.onValueChanged.bind(this, 'mechanics')}
+              />
+              <Dropdown
+              containerStyle={{flex:1}}
+              label='Category'
+              data={this.props.gameFilterData.categories}
+              onChangeText={this.onValueChanged.bind(this, 'categories')}
               />
 
             </View>
           </View>
-      </Modal>
+        }
+        </Collapsible>
+        <TouchableOpacity
+          style={{
+              borderWidth:1,
+              borderColor:'rgba(0,0,0,0.2)',
+              alignItems:'center',
+              justifyContent:'center',
+              width:50,
+              height:35,
+              backgroundColor:'#841584',
+              borderBottomEndRadius:25,
+              borderBottomStartRadius:25,
+              alignSelf:"center",
+            }}
+            onPress={this.pickGame.bind(this)}
+        >
+        <Icon.Ionicons
+          name='ios-shuffle'
+          color="white"
+          style={{fontSize:25, height:25, marginTop:-5}}
+        />
+        </TouchableOpacity>
+
+      </View>
     );
   }
 }
